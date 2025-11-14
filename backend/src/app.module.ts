@@ -60,12 +60,12 @@ import { UsersModule } from './users/users.module';
       
       // dropSchema: Elimina y recrea todas las tablas cada vez que inicias
       // ❌ NUNCA usar en producción (perderías todos los datos)
-      dropSchema: true,
+      dropSchema: false,
       
       // synchronize: Sincroniza automáticamente el esquema de BD con las entidades
       // Si cambias una entidad, TypeORM actualiza la tabla automáticamente
       // ❌ NUNCA usar en producción (usa migraciones en su lugar)
-      synchronize: true,
+      synchronize: false,
     }),
 
     // 3️⃣ MÓDULOS DE FUNCIONALIDAD
