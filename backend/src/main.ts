@@ -30,7 +30,12 @@ async function bootstrap() {
   // usando el AppModule como módulo raíz
   const app = await NestFactory.create(AppModule);
 
-  // 2️⃣ CONFIGURACIÓN DE VALIDACIÓN GLOBAL
+  // 2️⃣ HABILITAR CORS
+  // CORS (Cross-Origin Resource Sharing) permite que
+  // nuestro backend sea accesible desde otros dominios
+  app.enableCors();
+
+  // 3️⃣ CONFIGURACIÓN DE VALIDACIÓN GLOBAL
   // ValidationPipe valida automáticamente todos los DTOs que entran
   // a nuestros endpoints. Es como un "guardia de seguridad" que
   // verifica que los datos cumplan con las reglas definidas
@@ -50,12 +55,12 @@ async function bootstrap() {
     }),
   );
 
-  // 3️⃣ CONFIGURACIÓN DEL PUERTO
+  // 4️⃣ CONFIGURACIÓN DEL PUERTO
   // Usa la variable de entorno PORT, o 3000 por defecto
   // El operador ?? es "nullish coalescing": usa 3000 solo si PORT es null/undefined
   const port = process.env.PORT ?? 3000;
 
-  // 4️⃣ INICIO DEL SERVIDOR
+  // 5️⃣ INICIO DEL SERVIDOR
   // El servidor comienza a escuchar peticiones HTTP en el puerto especificado
   await app.listen(port);
   console.log(`🚀 Servidor corriendo en http://localhost:${port}`);
