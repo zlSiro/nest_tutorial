@@ -3,9 +3,11 @@
     <h2>{{ isEditMode ? 'Editar Usuario' : 'Nuevo Usuario' }}</h2>
 
     <!-- Mensaje de error -->
-    <div *ngIf="error" class="alert alert-error">
-      {{ error }}
-    </div>
+    @if (error) {
+      <div class="alert alert-error">
+        {{ error }}
+      </div>
+    }
 
     <form [formGroup]="userForm" (ngSubmit)="onSubmit()">
       <!-- Email -->
@@ -17,9 +19,11 @@
           formControlName="email"
           [class.invalid]="isFieldInvalid('email')"
           placeholder="usuario@ejemplo.com">
-        <span *ngIf="isFieldInvalid('email')" class="error-message">
-          {{ getErrorMessage('email') }}
-        </span>
+        @if(isFieldInvalid('email')) {
+          <span class="error-message">
+            {{ getErrorMessage('email') }}
+          </span>
+        }
       </div>
 
       <!-- Contraseña -->
@@ -33,9 +37,11 @@
           formControlName="password"
           [class.invalid]="isFieldInvalid('password')"
           placeholder="Mínimo 6 caracteres">
-        <span *ngIf="isFieldInvalid('password')" class="error-message">
-          {{ getErrorMessage('password') }}
-        </span>
+        @if(isFieldInvalid('password')) {
+          <span class="error-message">
+            {{ getErrorMessage('password') }}
+          </span>
+        }
       </div>
 
       <!-- Nombre -->
@@ -47,9 +53,11 @@
           formControlName="nombre"
           [class.invalid]="isFieldInvalid('nombre')"
           placeholder="Juan">
-        <span *ngIf="isFieldInvalid('nombre')" class="error-message">
-          {{ getErrorMessage('nombre') }}
-        </span>
+        @if(isFieldInvalid('nombre')) {
+          <span class="error-message">
+            {{ getErrorMessage('nombre') }}
+          </span>
+        }
       </div>
 
       <!-- Apellido -->
@@ -61,9 +69,11 @@
           formControlName="apellido"
           [class.invalid]="isFieldInvalid('apellido')"
           placeholder="Pérez">
-        <span *ngIf="isFieldInvalid('apellido')" class="error-message">
-          {{ getErrorMessage('apellido') }}
-        </span>
+        @if(isFieldInvalid('apellido')) {
+          <span class="error-message">
+            {{ getErrorMessage('apellido') }}
+          </span>
+        }
       </div>
 
       <!-- Botones -->
