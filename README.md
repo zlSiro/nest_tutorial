@@ -12,6 +12,8 @@ Este proyecto es una API REST completa para gestión de usuarios, construida con
 2. [Requisitos Previos](#-requisitos-previos)
 3. [Conceptos Fundamentales](#-conceptos-fundamentales)
 4. [Paso a Paso - Construcción del Proyecto](#-paso-a-paso---construcción-del-proyecto)
+   - Paso 1-9: Módulo de Usuarios
+   - **Paso 10: Categorías y Productos (Relaciones)**
 5. [Arquitectura del Proyecto](#️-arquitectura-del-proyecto)
 6. [Testing de la API](#-testing-de-la-api)
 7. [Errores Comunes y Soluciones](#-errores-comunes-y-soluciones)
@@ -22,15 +24,23 @@ Este proyecto es una API REST completa para gestión de usuarios, construida con
 
 ## 🎯 ¿Qué construiremos?
 
-Una API REST completa con las siguientes características:
+Una API REST completa con tres módulos interconectados:
 
-### ✅ Funcionalidades
-- ✨ **CRUD Completo de Usuarios** (Create, Read, Update, Delete)
+### ✅ Módulos Implementados
+- 👤 **Users**: Gestión de usuarios con autenticación
+- 🏷️ **Categories**: Categorías de productos  
+- 🛒 **Products**: Productos relacionados con categorías
+
+### ✨ Funcionalidades
+- ✨ **CRUD Completo** para Users, Categories y Products
 - 🔐 **Seguridad**: Contraseñas hasheadas con bcrypt
-- ✔️ **Validaciones**: Datos validados con class-validator
+- ✔️ **Validaciones**: DTOs con class-validator
 - 🗄️ **Base de Datos**: MySQL con TypeORM
-- 🧹 **Soft Delete**: Eliminación lógica de usuarios
+- 🔗 **Relaciones**: OneToMany / ManyToOne entre entidades
+- ⚡ **Eager Loading**: Carga automática de relaciones
+- 🧹 **Soft Delete**: Eliminación lógica con validaciones
 - 📝 **Timestamps**: Registro automático de fechas
+- 🎯 **Query Params**: Filtrado de productos por categoría
 - ⚡ **Manejo de Errores**: Respuestas HTTP apropiadas
 
 ### 🛠️ Tecnologías Utilizadas
@@ -924,6 +934,958 @@ Respuesta: `409 Conflict - "El correo ya está registrado"`
 
 ---
 
+## 🏪 PASO 10: Módulos de Categorías y Productos (Relaciones)
+
+> **Objetivo**: Aprender a crear relaciones entre entidades (OneToMany / ManyToOne)
+
+Ahora expandiremos la API con dos nuevos módulos que tienen relaciones entre sí:
+- **Categories**: Categorías de productos
+- **Products**: Productos que pertenecen a una categoría
+
+### 📊 Diagrama de Relaciones
+
+```
+┌─────────────────────┐           ┌─────────────────────┐
+│     CATEGORY        │           │      PRODUCT        │
+├─────────────────────┤           ├─────────────────────┤
+│ id (PK)             │<──────────│ id (PK)             │
+│ nombre              │     1:N   │ nombre              │
+│ descripcion         │           │ descripcion         │
+│ isActive            │           │ precio (DECIMAL)    │
+│ createdAt           │           │ stock (INT)         │
+│ updatedAt           │           │ imageUrl            │
+└─────────────────────┘           │ category_id (FK)    │
+                                  │ isActive            │
+                                  │ createdAt           │
+                                  │ updatedAt           │
+                                  └─────────────────────┘
+```
+
+**Relación**: Una categoría puede tener múltiples productos (1:N)
+
+---
+
+### 🛠️ 10.1: Crear Módulo de Categorías
+
+```bash
+nest g resource categories --no-spec
+```
+
+**Estructura generada:**
+```
+src/categories/
+├── categories.controller.ts
+├── categories.module.ts
+├── categories.service.ts
+├── dto/
+│   ├── create-category.dto.ts
+│   └── update-category.dto.ts
+└── entities/
+    └── category.entity.ts
+```
+
+---
+
+### 📄 10.2: Definir Category Entity con OneToMany
+
+```typescript
+// src/categories/entities/category.entity.ts
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { Product } from '../../products/entities/product.entity';
+
+@Entity('categories')
+export class Category {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ type: 'varchar', length: 100 })
+  nombre: string;
+
+  @Column({ type: 'text', nullable: true })
+  descripcion: string;
+
+  // 🔗 RELACIÓN OneToMany con Products
+  @OneToMany(() => Product, (product) => product.category)
+  products: Product[];
+
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+```
+
+**Explicación de OneToMany:**
+- `@OneToMany(() => Product, ...)`: Una categoría tiene muchos productos
+- `product => product.category`: Cómo Product referencia a Category
+- `products: Product[]`: Campo virtual (no es columna en BD)
+
+---
+
+### 📝 10.3: DTOs de Categories
+
+```typescript
+// src/categories/dto/create-category.dto.ts
+import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+
+export class CreateCategoryDto {
+  @IsString()
+  @IsNotEmpty()
+  nombre: string;
+
+  @IsString()
+  @IsOptional()
+  descripcion?: string;
+}
+```
+
+```typescript
+// src/categories/dto/update-category.dto.ts
+import { PartialType } from '@nestjs/mapped-types';
+import { CreateCategoryDto } from './create-category.dto';
+
+export class UpdateCategoryDto extends PartialType(CreateCategoryDto) {}
+```
+
+---
+
+### 🔧 10.4: Categories Service (con validación de productos)
+
+```typescript
+// src/categories/categories.service.ts
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Category } from './entities/category.entity';
+import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
+
+@Injectable()
+export class CategoriesService {
+  constructor(
+    @InjectRepository(Category)
+    private categoriesRepository: Repository<Category>,
+  ) {}
+
+  async create(createCategoryDto: CreateCategoryDto): Promise<Category> {
+    // Validar nombre duplicado
+    const existingCategory = await this.categoriesRepository.findOne({
+      where: { nombre: createCategoryDto.nombre },
+    });
+
+    if (existingCategory) {
+      throw new ConflictException('Ya existe una categoría con ese nombre');
+    }
+
+    const category = this.categoriesRepository.create(createCategoryDto);
+    return await this.categoriesRepository.save(category);
+  }
+
+  async findAll(): Promise<Category[]> {
+    return await this.categoriesRepository.find({
+      where: { isActive: true },
+      relations: ['products'], // Incluir productos
+    });
+  }
+
+  async findOne(id: number): Promise<Category> {
+    const category = await this.categoriesRepository.findOne({
+      where: { id, isActive: true },
+      relations: ['products'],
+    });
+
+    if (!category) {
+      throw new NotFoundException(\`Categoría con ID \${id} no encontrada\`);
+    }
+    return category;
+  }
+
+  async update(id: number, updateCategoryDto: UpdateCategoryDto): Promise<Category> {
+    const category = await this.findOne(id);
+
+    // Validar nombre duplicado si se cambia
+    if (updateCategoryDto.nombre && updateCategoryDto.nombre !== category.nombre) {
+      const existingCategory = await this.categoriesRepository.findOne({
+        where: { nombre: updateCategoryDto.nombre },
+      });
+
+      if (existingCategory) {
+        throw new ConflictException('Ya existe una categoría con ese nombre');
+      }
+    }
+
+    Object.assign(category, updateCategoryDto);
+    return await this.categoriesRepository.save(category);
+  }
+
+  async remove(id: number): Promise<void> {
+    const category = await this.categoriesRepository.findOne({
+      where: { id },
+      relations: ['products'],
+    });
+
+    if (!category) {
+      throw new NotFoundException(\`Categoría con ID \${id} no encontrada\`);
+    }
+
+    // ⚠️ NO permitir eliminar si tiene productos activos
+    const activeProducts = category.products?.filter((p) => p.isActive) || [];
+    if (activeProducts.length > 0) {
+      throw new BadRequestException(
+        \`No se puede eliminar la categoría porque tiene \${activeProducts.length} producto(s) activo(s) asociado(s)\`,
+      );
+    }
+
+    // Soft delete
+    category.isActive = false;
+    await this.categoriesRepository.save(category);
+  }
+}
+```
+
+**Regla de Negocio Importante:**
+- No se puede eliminar una categoría con productos activos
+- Esto mantiene la integridad referencial
+
+---
+
+### 🎮 10.5: Categories Controller
+
+```typescript
+// src/categories/categories.controller.ts
+import { Controller, Get, Post, Body, Patch, Param, Delete, HttpCode, HttpStatus, ParseIntPipe } from '@nestjs/common';
+import { CategoriesService } from './categories.service';
+import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
+
+@Controller('categories')
+export class CategoriesController {
+  constructor(private readonly categoriesService: CategoriesService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  create(@Body() createCategoryDto: CreateCategoryDto) {
+    return this.categoriesService.create(createCategoryDto);
+  }
+
+  @Get()
+  findAll() {
+    return this.categoriesService.findAll();
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.categoriesService.findOne(id);
+  }
+
+  @Patch(':id')
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateCategoryDto: UpdateCategoryDto) {
+    return this.categoriesService.update(id, updateCategoryDto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.categoriesService.remove(id);
+  }
+}
+```
+
+---
+
+### 🔗 10.6: Categories Module (con export para Products)
+
+```typescript
+// src/categories/categories.module.ts
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { CategoriesService } from './categories.service';
+import { CategoriesController } from './categories.controller';
+import { Category } from './entities/category.entity';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([Category])],
+  controllers: [CategoriesController],
+  providers: [CategoriesService],
+  exports: [TypeOrmModule], // ⚠️ Exportar para que Products pueda usar Category
+})
+export class CategoriesModule {}
+```
+
+---
+
+### 🏪 10.7: Crear Módulo de Products
+
+```bash
+nest g resource products --no-spec
+```
+
+---
+
+### 📦 10.8: Product Entity con ManyToOne
+
+```typescript
+// src/products/entities/product.entity.ts
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Category } from '../../categories/entities/category.entity';
+
+@Entity('products')
+export class Product {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ type: 'varchar', length: 200 })
+  nombre: string;
+
+  @Column({ type: 'text', nullable: true })
+  descripcion: string;
+
+  // 💰 DECIMAL para precios (10 dígitos, 2 decimales)
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  precio: number;
+
+  @Column({ type: 'int', default: 0 })
+  stock: number;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  imageUrl: string;
+
+  // 🔗 RELACIÓN ManyToOne con Category
+  @ManyToOne(() => Category, (category) => category.products, {
+    eager: true, // ⚡ Siempre trae la categoría automáticamente
+  })
+  @JoinColumn({ name: 'category_id' }) // Nombre de la FK en BD
+  category: Category;
+
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+```
+
+**Conceptos importantes:**
+- `@ManyToOne`: Muchos productos → una categoría
+- `eager: true`: Trae la categoría automáticamente en cada query
+- `@JoinColumn`: Especifica el nombre de la columna FK
+- `decimal(10,2)`: Para precios monetarios (ej: 1299.99)
+
+---
+
+### 📝 10.9: Product DTOs con validaciones numéricas
+
+```typescript
+// src/products/dto/create-product.dto.ts
+import {
+  IsString,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  Min,
+  IsInt,
+} from 'class-validator';
+
+export class CreateProductDto {
+  @IsString()
+  @IsNotEmpty()
+  nombre: string;
+
+  @IsString()
+  @IsOptional()
+  descripcion?: string;
+
+  // 💰 Precio: número con máximo 2 decimales, positivo
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  precio: number;
+
+  // 📦 Stock: entero, mínimo 0 (permite 0 = sin stock)
+  @IsInt()
+  @Min(0)
+  stock: number;
+
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
+
+  // 🔗 ID de la categoría (Foreign Key)
+  @IsInt()
+  @IsPositive()
+  categoryId: number;
+}
+```
+
+```typescript
+// src/products/dto/update-product.dto.ts
+import { PartialType } from '@nestjs/mapped-types';
+import { CreateProductDto } from './create-product.dto';
+
+export class UpdateProductDto extends PartialType(CreateProductDto) {}
+```
+
+**Validaciones numéricas:**
+- `@IsNumber({ maxDecimalPlaces: 2 })`: Máximo 2 decimales (precios)
+- `@IsPositive()`: Mayor a 0
+- `@IsInt()`: Número entero
+- `@Min(0)`: Mínimo 0 (permite stock = 0)
+
+---
+
+### 🔧 10.10: Products Service (validación de categorías)
+
+```typescript
+// src/products/products.service.ts
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Product } from './entities/product.entity';
+import { CreateProductDto } from './dto/create-product.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
+import { Category } from '../categories/entities/category.entity';
+
+@Injectable()
+export class ProductsService {
+  constructor(
+    @InjectRepository(Product)
+    private productsRepository: Repository<Product>,
+    
+    // ⚠️ Inyectar repositorio de Category para validar
+    @InjectRepository(Category)
+    private categoriesRepository: Repository<Category>,
+  ) {}
+
+  async create(createProductDto: CreateProductDto): Promise<Product> {
+    // 1️⃣ Validar que la categoría exista
+    const category = await this.categoriesRepository.findOne({
+      where: { id: createProductDto.categoryId, isActive: true },
+    });
+
+    if (!category) {
+      throw new NotFoundException(
+        \`Categoría con ID \${createProductDto.categoryId} no encontrada\`,
+      );
+    }
+
+    // 2️⃣ Separar categoryId del DTO
+    const { categoryId, ...productData } = createProductDto;
+
+    // 3️⃣ Crear producto con la entidad Category completa
+    const product = this.productsRepository.create({
+      ...productData,
+      category, // Asignar entidad, no ID
+    });
+
+    return await this.productsRepository.save(product);
+  }
+
+  async findAll(): Promise<Product[]> {
+    return await this.productsRepository.find({
+      where: { isActive: true },
+      relations: ['category'], // Redundante por eager, pero explícito
+    });
+  }
+
+  // 🔍 Filtrar productos por categoría
+  async findByCategory(categoryId: number): Promise<Product[]> {
+    return await this.productsRepository.find({
+      where: {
+        category: { id: categoryId },
+        isActive: true,
+      },
+    });
+  }
+
+  async findOne(id: number): Promise<Product> {
+    const product = await this.productsRepository.findOne({
+      where: { id, isActive: true },
+      relations: ['category'],
+    });
+
+    if (!product) {
+      throw new NotFoundException(\`Producto con ID \${id} no encontrado\`);
+    }
+
+    return product;
+  }
+
+  async update(id: number, updateProductDto: UpdateProductDto): Promise<Product> {
+    const product = await this.findOne(id);
+
+    // Si se actualiza la categoría, validar que exista
+    if (updateProductDto.categoryId) {
+      const category = await this.categoriesRepository.findOne({
+        where: { id: updateProductDto.categoryId, isActive: true },
+      });
+
+      if (!category) {
+        throw new NotFoundException(
+          \`Categoría con ID \${updateProductDto.categoryId} no encontrada\`,
+        );
+      }
+
+      const { categoryId, ...productData } = updateProductDto;
+      Object.assign(product, { ...productData, category });
+    } else {
+      Object.assign(product, updateProductDto);
+    }
+
+    return await this.productsRepository.save(product);
+  }
+
+  async remove(id: number): Promise<void> {
+    const product = await this.findOne(id);
+    product.isActive = false;
+    await this.productsRepository.save(product);
+  }
+}
+```
+
+**Puntos clave:**
+1. Inyecta dos repositorios: `Product` y `Category`
+2. Valida que la categoría exista antes de crear/actualizar
+3. Separa `categoryId` del DTO y asigna la entidad `Category` completa
+4. Método adicional `findByCategory()` para filtrar
+
+---
+
+### 🎮 10.11: Products Controller con Query Params
+
+```typescript
+// src/products/products.controller.ts
+import { Controller, Get, Post, Body, Patch, Param, Delete, HttpCode, HttpStatus, Query, ParseIntPipe } from '@nestjs/common';
+import { ProductsService } from './products.service';
+import { CreateProductDto } from './dto/create-product.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
+
+@Controller('products')
+export class ProductsController {
+  constructor(private readonly productsService: ProductsService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  create(@Body() createProductDto: CreateProductDto) {
+    return this.productsService.create(createProductDto);
+  }
+
+  // 🔍 GET /products o GET /products?categoryId=1
+  @Get()
+  findAll(@Query('categoryId', ParseIntPipe) categoryId?: number) {
+    if (categoryId) {
+      return this.productsService.findByCategory(categoryId);
+    }
+    return this.productsService.findAll();
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.productsService.findOne(id);
+  }
+
+  @Patch(':id')
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateProductDto: UpdateProductDto) {
+    return this.productsService.update(id, updateProductDto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.productsService.remove(id);
+  }
+}
+```
+
+**Query Params:**
+- `@Query('categoryId')`: Extrae `?categoryId=1` de la URL
+- Permite filtrar productos por categoría
+- Ejemplo: `GET /products?categoryId=1`
+
+---
+
+### 🔗 10.12: Products Module (importa Categories)
+
+```typescript
+// src/products/products.module.ts
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ProductsService } from './products.service';
+import { ProductsController } from './products.controller';
+import { Product } from './entities/product.entity';
+import { CategoriesModule } from '../categories/categories.module';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([Product]),
+    CategoriesModule, // ⚠️ Importar para acceder a Category repository
+  ],
+  controllers: [ProductsController],
+  providers: [ProductsService],
+  exports: [ProductsService],
+})
+export class ProductsModule {}
+```
+
+**Dependencia entre módulos:**
+- `ProductsModule` importa `CategoriesModule`
+- Esto permite inyectar `Repository<Category>` en `ProductsService`
+- `CategoriesModule` exporta `TypeOrmModule` para compartir el repositorio
+
+---
+
+### 🔌 10.13: Registrar Módulos en AppModule
+
+```typescript
+// src/app.module.ts
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { UsersModule } from './users/users.module';
+import { CategoriesModule } from './categories/categories.module';
+import { ProductsModule } from './products/products.module';
+
+@Module({
+  imports: [
+    TypeOrmModule.forRoot({
+      type: 'mysql',
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT) || 3306,
+      username: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || '',
+      database: process.env.DB_NAME || 'nest_users_db',
+      synchronize: true,
+      dropSchema: false,
+      autoLoadEntities: true,
+    }),
+    UsersModule,
+    CategoriesModule,   // ✅ Nuevo módulo
+    ProductsModule,     // ✅ Nuevo módulo
+  ],
+})
+export class AppModule {}
+```
+
+---
+
+### 🧪 10.14: Probar los Endpoints con Relaciones
+
+**1️⃣ Crear Categoría:**
+```http
+POST http://localhost:3000/categories
+Content-Type: application/json
+
+{
+  "nombre": "Electrónica",
+  "descripcion": "Productos electrónicos y tecnología"
+}
+```
+
+**Respuesta:**
+```json
+{
+  "id": 1,
+  "nombre": "Electrónica",
+  "descripcion": "Productos electrónicos y tecnología",
+  "isActive": true,
+  "createdAt": "2025-11-17T10:00:00.000Z",
+  "updatedAt": "2025-11-17T10:00:00.000Z"
+}
+```
+
+---
+
+**2️⃣ Crear Producto con Categoría:**
+```http
+POST http://localhost:3000/products
+Content-Type: application/json
+
+{
+  "nombre": "Laptop HP Pavilion",
+  "descripcion": "Laptop con procesador Intel Core i7, 16GB RAM, 512GB SSD",
+  "precio": 1299.99,
+  "stock": 15,
+  "imageUrl": "https://example.com/laptop.jpg",
+  "categoryId": 1
+}
+```
+
+**Respuesta (con categoría por eager loading):**
+```json
+{
+  "id": 1,
+  "nombre": "Laptop HP Pavilion",
+  "descripcion": "Laptop con procesador Intel Core i7, 16GB RAM, 512GB SSD",
+  "precio": "1299.99",
+  "stock": 15,
+  "imageUrl": "https://example.com/laptop.jpg",
+  "isActive": true,
+  "createdAt": "2025-11-17T10:05:00.000Z",
+  "updatedAt": "2025-11-17T10:05:00.000Z",
+  "category": {
+    "id": 1,
+    "nombre": "Electrónica",
+    "descripcion": "Productos electrónicos y tecnología",
+    "isActive": true
+  }
+}
+```
+
+---
+
+**3️⃣ Listar Categorías con sus Productos:**
+```http
+GET http://localhost:3000/categories
+```
+
+**Respuesta:**
+```json
+[
+  {
+    "id": 1,
+    "nombre": "Electrónica",
+    "descripcion": "Productos electrónicos y tecnología",
+    "isActive": true,
+    "createdAt": "2025-11-17T10:00:00.000Z",
+    "updatedAt": "2025-11-17T10:00:00.000Z",
+    "products": [
+      {
+        "id": 1,
+        "nombre": "Laptop HP Pavilion",
+        "precio": "1299.99",
+        "stock": 15
+      },
+      {
+        "id": 2,
+        "nombre": "Mouse Logitech G502",
+        "precio": "79.99",
+        "stock": 50
+      }
+    ]
+  }
+]
+```
+
+---
+
+**4️⃣ Filtrar Productos por Categoría:**
+```http
+GET http://localhost:3000/products?categoryId=1
+```
+
+**Respuesta:**
+```json
+[
+  {
+    "id": 1,
+    "nombre": "Laptop HP Pavilion",
+    "precio": "1299.99",
+    "stock": 15,
+    "category": {
+      "id": 1,
+      "nombre": "Electrónica"
+    }
+  },
+  {
+    "id": 2,
+    "nombre": "Mouse Logitech G502",
+    "precio": "79.99",
+    "stock": 50,
+    "category": {
+      "id": 1,
+      "nombre": "Electrónica"
+    }
+  }
+]
+```
+
+---
+
+**5️⃣ Intentar Eliminar Categoría con Productos:**
+```http
+DELETE http://localhost:3000/categories/1
+```
+
+**Respuesta (400 Bad Request):**
+```json
+{
+  "statusCode": 400,
+  "message": "No se puede eliminar la categoría porque tiene 2 producto(s) activo(s) asociado(s)",
+  "error": "Bad Request"
+}
+```
+
+---
+
+**6️⃣ Error: Categoría No Existe:**
+```http
+POST http://localhost:3000/products
+Content-Type: application/json
+
+{
+  "nombre": "Producto Test",
+  "precio": 100,
+  "stock": 10,
+  "categoryId": 999
+}
+```
+
+**Respuesta (404 Not Found):**
+```json
+{
+  "statusCode": 404,
+  "message": "Categoría con ID 999 no encontrada",
+  "error": "Not Found"
+}
+```
+
+---
+
+### 📚 10.15: Conceptos Clave de Relaciones
+
+#### 🔗 Tipos de Relaciones en TypeORM
+
+**OneToMany (1:N):**
+```typescript
+// Una categoría tiene muchos productos
+@OneToMany(() => Product, product => product.category)
+products: Product[];
+```
+
+**ManyToOne (N:1):**
+```typescript
+// Muchos productos pertenecen a una categoría
+@ManyToOne(() => Category, category => category.products)
+category: Category;
+```
+
+**Relación Bidireccional:**
+- Category → `@OneToMany` → products[]
+- Product → `@ManyToOne` → category
+- Ambas deben apuntar una a la otra
+
+---
+
+#### ⚡ Eager Loading
+
+**Con `eager: true`:**
+```typescript
+@ManyToOne(() => Category, category => category.products, {
+  eager: true, // ✅ Siempre trae la categoría
+})
+category: Category;
+```
+
+**Resultado:**
+```typescript
+const product = await productsRepository.findOne({ where: { id: 1 } });
+// product.category está cargado automáticamente
+console.log(product.category.nombre); // "Electrónica"
+```
+
+**Sin eager:**
+```typescript
+// Necesitas especificar relations manualmente
+const product = await productsRepository.findOne({
+  where: { id: 1 },
+  relations: ['category'],
+});
+```
+
+---
+
+#### 💰 DECIMAL para Precios
+
+**Problema con FLOAT:**
+```javascript
+0.1 + 0.2 === 0.3 // false (0.30000000000000004)
+```
+
+**Solución con DECIMAL:**
+```typescript
+@Column({ type: 'decimal', precision: 10, scale: 2 })
+precio: number;
+```
+
+- `precision: 10`: Total de dígitos
+- `scale: 2`: Dígitos después del punto
+- Ejemplo: 99999999.99
+
+---
+
+#### 🔑 Foreign Keys
+
+**En TypeORM:**
+```typescript
+@ManyToOne(() => Category)
+@JoinColumn({ name: 'category_id' })  // Nombre en BD
+category: Category;
+```
+
+**En MySQL:**
+```sql
+CREATE TABLE products (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(200),
+  precio DECIMAL(10,2),
+  category_id INT,  -- Foreign Key
+  FOREIGN KEY (category_id) REFERENCES categories(id)
+);
+```
+
+---
+
+#### 🔄 Compartir Repositorios entre Módulos
+
+**Problema:**
+```
+ProductsService necesita validar que Category exista
+→ Necesita Repository<Category>
+→ Category está en CategoriesModule
+```
+
+**Solución:**
+
+1. **CategoriesModule exporta:**
+```typescript
+exports: [TypeOrmModule]  // Comparte Category repository
+```
+
+2. **ProductsModule importa:**
+```typescript
+imports: [CategoriesModule]  // Recibe Category repository
+```
+
+3. **ProductsService inyecta:**
+```typescript
+constructor(
+  @InjectRepository(Product) productsRepo,
+  @InjectRepository(Category) categoriesRepo  // ✅ Ahora disponible
+)
+```
+
+---
+
+### ✅ Checklist: ¿Qué Aprendimos?
+
+- ✅ Crear relaciones OneToMany / ManyToOne
+- ✅ Usar `eager: true` para carga automática
+- ✅ Validar existencia de entidades relacionadas
+- ✅ Manejar Foreign Keys correctamente
+- ✅ Usar `@JoinColumn` para nombres de columnas
+- ✅ Trabajar con DECIMAL para precios
+- ✅ Filtrar con query params (`?categoryId=1`)
+- ✅ Prevenir eliminación con dependencias activas
+- ✅ Compartir repositorios entre módulos
+- ✅ Separar `categoryId` (DTO) de `category` (Entity)
+
+---
+
 ## 🐛 Errores Comunes y Soluciones
 
 ### 1. Error de Conexión a MySQL
@@ -982,24 +1944,32 @@ Error: listen EADDRINUSE: address already in use :::3000
 ## 🚀 Mejoras Futuras
 
 ### Nivel Básico
-- [ ] Agregar paginación en `findAll()`
-- [ ] Implementar filtros de búsqueda
+- [ ] Agregar paginación en `findAll()` (usuarios, categorías, productos)
+- [ ] Implementar filtros de búsqueda por múltiples campos
 - [ ] Agregar más validaciones a los DTOs
 - [ ] Implementar recuperación de contraseña
+- [ ] Endpoint para productos con bajo stock
+- [ ] Estadísticas: productos por categoría, categorías más populares
 
 ### Nivel Intermedio
-- [ ] Autenticación con JWT
-- [ ] Roles y permisos (Admin, User)
-- [ ] Subida de avatar de usuario
-- [ ] Rate limiting
+- [ ] Autenticación con JWT (inicio de sesión)
+- [ ] Roles y permisos (Admin, User, Manager)
+- [ ] Subida de avatar de usuario e imágenes de productos
+- [ ] Rate limiting (prevenir spam)
 - [ ] Logging con Winston
+- [ ] Relación ManyToMany: Products ↔ Tags
+- [ ] Carrito de compras (Orders, OrderItems)
+- [ ] Sistema de reviews/calificaciones para productos
 
 ### Nivel Avanzado
 - [ ] Migraciones de base de datos (TypeORM migrations)
 - [ ] Tests unitarios y E2E con Jest
-- [ ] Documentación con Swagger
+- [ ] Documentación con Swagger/OpenAPI
 - [ ] Caché con Redis
-- [ ] Implementar GraphQL
+- [ ] Implementar GraphQL como alternativa a REST
+- [ ] Websockets para notificaciones en tiempo real
+- [ ] Microservicios con @nestjs/microservices
+- [ ] Implementar búsqueda full-text con Elasticsearch
 
 ---
 
@@ -1022,23 +1992,55 @@ Error: listen EADDRINUSE: address already in use :::3000
 
 ## 🎓 Ejercicios Propuestos
 
-### Ejercicio 1: Agregar Campo "Edad"
+### Módulo Users
+
+**Ejercicio 1: Agregar Campo "Edad"**
 1. Agrega un campo `edad: number` a la entity
 2. Agrega validaciones en el DTO (`@IsNumber()`, `@Min(18)`, `@Max(120)`)
 3. Actualiza el service y controller si es necesario
 4. Prueba con Postman
 
-### Ejercicio 2: Implementar Búsqueda por Email
+**Ejercicio 2: Implementar Búsqueda por Email**
 1. Crea un endpoint `GET /users/search?email=xxx`
 2. Implementa el método en el service
 3. Usa `@Query()` en el controller
 4. Prueba la funcionalidad
 
-### Ejercicio 3: Agregar Paginación
+**Ejercicio 3: Agregar Paginación**
 1. Crea un endpoint `GET /users?page=1&limit=10`
 2. Usa `take` y `skip` en TypeORM
 3. Devuelve también el total de registros
 4. Implementa metadatos de paginación en la respuesta
+
+---
+
+### Módulo Categories & Products
+
+**Ejercicio 4: Ordenamiento de Productos**
+1. Agrega query param: `GET /products?sortBy=price&order=asc`
+2. Implementa ordenamiento por precio, nombre, stock
+3. Permite orden ascendente (asc) y descendente (desc)
+
+**Ejercicio 5: Rango de Precios**
+1. Endpoint: `GET /products?minPrice=100&maxPrice=500`
+2. Usa `Between()` de TypeORM
+3. Combina con filtro de categoría
+
+**Ejercicio 6: Búsqueda por Nombre**
+1. Endpoint: `GET /products?search=laptop`
+2. Busca en nombre y descripción
+3. Usa `Like()` de TypeORM con `%search%`
+
+**Ejercicio 7: Productos con Bajo Stock**
+1. Endpoint: `GET /products/low-stock?threshold=10`
+2. Retorna productos con stock menor al umbral
+3. Útil para gestión de inventario
+
+**Ejercicio 8: Agregar Reviews a Productos**
+1. Crea entidad `Review` con rating (1-5) y comentario
+2. Relación OneToMany: Product → Reviews
+3. Implementa CRUD de reviews
+4. Calcula rating promedio por producto
 
 ---
 
@@ -1089,16 +2091,37 @@ Si llegaste hasta aquí y tu API funciona, ¡felicidades! 🎊
 Has aprendido:
 - ✅ Arquitectura de NestJS (Módulos, Controllers, Services)
 - ✅ TypeORM y bases de datos relacionales
-- ✅ DTOs y validaciones
-- ✅ CRUD completo
-- ✅ Seguridad básica (bcrypt)
-- ✅ Manejo de errores HTTP
-- ✅ Soft delete y timestamps
+- ✅ DTOs y validaciones con class-validator
+- ✅ CRUD completo para múltiples entidades
+- ✅ **Relaciones entre entidades (OneToMany / ManyToOne)**
+- ✅ **Eager Loading y lazy loading**
+- ✅ **Foreign Keys y validaciones de integridad**
+- ✅ Seguridad básica (bcrypt para contraseñas)
+- ✅ Manejo de errores HTTP apropiados
+- ✅ Soft delete y timestamps automáticos
+- ✅ **Query params para filtrado**
+- ✅ **Compartir repositorios entre módulos**
+- ✅ **Validaciones numéricas (DECIMAL, precios, stock)**
 
 **Próximos pasos sugeridos:**
-1. Implementar autenticación con JWT
-2. Agregar tests unitarios
-3. Dockerizar la aplicación
-4. Deployar en la nube (Heroku, AWS, DigitalOcean)
+1. Implementar autenticación con JWT (login/logout)
+2. Agregar tests unitarios y E2E
+3. Implementar un módulo de Orders (pedidos) que relacione Users y Products
+4. Dockerizar la aplicación (Docker + Docker Compose)
+5. Documentar la API con Swagger/OpenAPI
+6. Deployar en la nube (Heroku, AWS, DigitalOcean, Railway)
 
 ¡Sigue practicando y construyendo! 🚀
+
+---
+
+**📊 Proyecto Completo:**
+
+Ahora tienes una API REST con:
+- 3 módulos funcionales (Users, Categories, Products)
+- Relaciones bidireccionales
+- Validaciones robustas
+- Arquitectura escalable
+- Código bien documentado
+
+**¡Este es un excelente portfolio piece para mostrar a empleadores!** 💼
