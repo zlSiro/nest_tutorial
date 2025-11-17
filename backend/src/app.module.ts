@@ -67,7 +67,7 @@ import { CategoriesModule } from './categories/categories.module';
       // synchronize: Sincroniza automáticamente el esquema de BD con las entidades
       // Si cambias una entidad, TypeORM actualiza la tabla automáticamente
       // ❌ NUNCA usar en producción (usa migraciones en su lugar)
-      synchronize: false,
+      synchronize: true,
     }),
 
     // 3️⃣ MÓDULOS DE FUNCIONALIDAD
