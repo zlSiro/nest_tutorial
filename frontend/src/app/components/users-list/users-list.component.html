@@ -1,0 +1,77 @@
+<div class="container">
+  <div class="header">
+    <h1>Gestion de Usuarios</h1>
+    <button class="btn btn-primary" (click)="onAddUser()">
+      + Agregar Usuario
+    </button>
+  </div>
+
+  <!-- Mensaje de error -->
+  @if(error) {
+    <div class="alert alert-danger">
+      {{ error }}
+    </div>
+  }
+
+  <!-- Formulario (se muestra cuando showForm es true) -->
+  <app-user-form
+    *ngIf="showForm"
+    [user]="selectedUser"
+    (submitForm)="onFormSubmit()"
+    (cancelForm)="onFormCancel()">
+  </app-user-form>
+
+  <!-- Loading -->
+  @if(loading) {
+    <div class="loading">
+      Cargando usuarios...
+    </div>
+  }
+
+  <!-- Tabla de Usuarios -->
+  @if(!loading && !showForm) {
+    <div class="table-container">
+      <table class="users-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Email</th>
+            <th>Nombre</th>
+            <th>Apellido</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (user of users; track user) {
+            <tr>
+              <td>{{ user.id }}</td>
+              <td>{{ user.email }}</td>
+              <td>{{ user.nombre }}</td>
+              <td>{{ user.apellido }}</td>
+              <td>
+                <span [className]="user.isActive ? 'badge-active' : 'badge-inactive'">
+                  {{ user.isActive ? 'Activo' : 'Inactivo' }}
+                </span>
+              </td>
+              <td class="actions">
+                <button class="btn btn-edit" (click)="onEditUser(user)">
+                  Editar
+                </button>
+                <button class="btn btn-delete" (click)="onDeleteUser(user.id)">
+                  Eliminar
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+
+      @if(users.length === 0) {
+        <p class="no-data">
+          No hay usuarios disponibles.
+        </p>
+      }
+    </div>
+  }
+</div>
