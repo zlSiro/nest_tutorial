@@ -1,0 +1,80 @@
+<div class="form-container">
+  <div class="form-card">
+    <h2>{{ isEditMode ? 'Editar Usuario' : 'Nuevo Usuario' }}</h2>
+
+    <!-- Mensaje de error -->
+    <div *ngIf="error" class="alert alert-error">
+      {{ error }}
+    </div>
+
+    <form [formGroup]="userForm" (ngSubmit)="onSubmit()">
+      <!-- Email -->
+      <div class="form-group">
+        <label for="email">Email *</label>
+        <input
+          type="email"
+          id="email"
+          formControlName="email"
+          [class.invalid]="isFieldInvalid('email')"
+          placeholder="usuario@ejemplo.com">
+        <span *ngIf="isFieldInvalid('email')" class="error-message">
+          {{ getErrorMessage('email') }}
+        </span>
+      </div>
+
+      <!-- Contraseña -->
+      <div class="form-group">
+        <label for="password">
+          Contraseña {{ isEditMode ? '(dejar en blanco para no cambiar)' : '*' }}
+        </label>
+        <input
+          type="password"
+          id="password"
+          formControlName="password"
+          [class.invalid]="isFieldInvalid('password')"
+          placeholder="Mínimo 6 caracteres">
+        <span *ngIf="isFieldInvalid('password')" class="error-message">
+          {{ getErrorMessage('password') }}
+        </span>
+      </div>
+
+      <!-- Nombre -->
+      <div class="form-group">
+        <label for="nombre">Nombre *</label>
+        <input
+          type="text"
+          id="nombre"
+          formControlName="nombre"
+          [class.invalid]="isFieldInvalid('nombre')"
+          placeholder="Juan">
+        <span *ngIf="isFieldInvalid('nombre')" class="error-message">
+          {{ getErrorMessage('nombre') }}
+        </span>
+      </div>
+
+      <!-- Apellido -->
+      <div class="form-group">
+        <label for="apellido">Apellido *</label>
+        <input
+          type="text"
+          id="apellido"
+          formControlName="apellido"
+          [class.invalid]="isFieldInvalid('apellido')"
+          placeholder="Pérez">
+        <span *ngIf="isFieldInvalid('apellido')" class="error-message">
+          {{ getErrorMessage('apellido') }}
+        </span>
+      </div>
+
+      <!-- Botones -->
+      <div class="form-actions">
+        <button type="button" class="btn btn-cancel" (click)="onCancel()" [disabled]="loading">
+          Cancelar
+        </button>
+        <button type="submit" class="btn btn-submit" [disabled]="loading">
+          {{ loading ? 'Guardando...' : (isEditMode ? 'Actualizar' : 'Crear') }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
