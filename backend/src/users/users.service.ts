@@ -126,7 +126,18 @@ export class UsersService {
     // - Asigna el ID autogenerado
     // - Establece createdAt y updatedAt
     // - Devuelve el objeto completo
-    return this.usersRepository.save(newUser);
+    await this.usersRepository.save(newUser);
+
+    // PASO 5: Devolver solo campos públicos (sin password)
+    // ------------------------------------------------
+    // Hacemos una consulta adicional con select específico
+    // para evitar exponer información sensible como el password
+    const userWithoutPassword = await this.usersRepository.findOne({
+      where: { email: createUserDto.email },
+      select: ['id', 'email', 'nombre', 'apellido', 'createdAt']
+    });
+    
+    return userWithoutPassword!;
   }
 
   /**
@@ -171,7 +182,7 @@ export class UsersService {
    * Solo retorna usuarios activos (no los eliminados con soft delete)
    * 
    * @param id - ID del usuario a buscar
-   * @returns Promise<User> - El usuario encontrado
+   * @returns Promise<User> - El usuario encontrado (sin password)
    * @throws NotFoundException - Si el usuario no existe o no está activo
    */
   async findOne(id: number): Promise<User> {
@@ -179,10 +190,14 @@ export class UsersService {
     // where: { id, isActive: true } es shorthand para:
     // where: { id: id, isActive: true }
     // 
+    // select: [...] → Solo devuelve campos públicos (sin password)
+    // 
     // SQL equivalente:
-    // SELECT * FROM users WHERE id = ? AND is_active = true
+    // SELECT id, email, nombre, apellido, is_active, created_at, updated_at
+    // FROM users WHERE id = ? AND is_active = true
     const user = await this.usersRepository.findOne({
       where: { id, isActive: true },
+      select: ['id', 'email', 'nombre', 'apellido', 'isActive', 'createdAt']
     });
 
     // Si no encontramos el usuario, lanzamos un error 404
@@ -261,7 +276,17 @@ export class UsersService {
     // 
     // SQL equivalente:
     // UPDATE users SET nombre = ?, ... , updated_at = NOW() WHERE id = ?
-    return this.usersRepository.save(user);
+    await this.usersRepository.save(user);
+
+    // PASO 6: Devolver solo campos públicos (sin password)
+    // ------------------------------------------------
+    // Recargamos el usuario con solo los campos públicos
+    const updatedUser = await this.usersRepository.findOne({
+      where: { id },
+      select: ['id', 'email', 'nombre', 'apellido', 'isActive', 'createdAt', 'updatedAt']
+    });
+
+    return updatedUser!;
 
   }
 
