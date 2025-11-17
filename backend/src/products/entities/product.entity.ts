@@ -1,6 +1,15 @@
-import { Category } from "src/categories/entities/category.entity";
-import { Column, CreateDateColumn, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
+import { Category } from '../../categories/entities/category.entity';
 
+@Entity('products')
 export class Product {
   @PrimaryGeneratedColumn()
   id: number;
@@ -29,9 +38,9 @@ export class Product {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  // Relacion: Muchos productos pertenecen a una categoría
+  // Relación: Muchos productos pertenecen a una categoría
   @ManyToOne(() => Category, (category) => category.products, {
-    eager: true, // Carga automática de la categoría al obtener el producto
+    eager: true, // Carga automáticamente la categoría al consultar productos
   })
   @JoinColumn({ name: 'category_id' })
   category: Category;
