@@ -18,6 +18,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from './users/users.module';
+import { ProductsModule } from './products/products.module';
+import { CategoriesModule } from './categories/categories.module';
 
 /**
  * Decorador @Module - Define un módulo de NestJS
@@ -71,6 +73,10 @@ import { UsersModule } from './users/users.module';
     // 3️⃣ MÓDULOS DE FUNCIONALIDAD
     // Aquí importamos todos los módulos de features de nuestra app
     UsersModule, // Módulo que maneja toda la lógica de usuarios
+
+    ProductsModule,
+
+    CategoriesModule, 
   ],
 })
 export class AppModule {}
